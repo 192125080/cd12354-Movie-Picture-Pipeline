@@ -13,6 +13,7 @@ app.register_blueprint(movies_api)
 def health_check():
     return jsonify({"status": "ok"})
 
+
 # Start app
 if __name__ == "__main__":
     app.run(
