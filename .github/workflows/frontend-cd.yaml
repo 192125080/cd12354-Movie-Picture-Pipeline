@@ -58,11 +58,21 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - uses: azure/setup-kubectl@v4
       - run: aws eks update-kubeconfig --region "$AWS_REGION" --name cluster
+        working-directory: .
       - id: backend
         run: |
-          hostname=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          test -n "$hostname"
-          echo "url=http://${hostname}" >> "$GITHUB_OUTPUT"
+          for attempt in $(seq 1 60); do
+            hostname=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            if [ -n "$hostname" ]; then
+              echo "url=http://${hostname}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Waiting for backend LoadBalancer hostname (attempt ${attempt}/60)..."
+            sleep 10
+          done
+          echo "Backend service or LoadBalancer hostname is unavailable." >&2
+          exit 1
+        working-directory: .
       - id: registry
         run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
         working-directory: .
@@ -91,13 +101,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - uses: azure/setup-kubectl@v4
       - run: aws eks update-kubeconfig --region "$AWS_REGION" --name cluster
+        working-directory: .
       - run: kubectl apply -k starter/frontend/k8s
+        working-directory: .
       - run: kubectl set image deployment/frontend frontend="${{ needs.build.outputs.image }}"
+        working-directory: .
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/frontend --timeout=180s
           kubectl get pods
           kubectl get services frontend
+        working-directory: .
       - name: Verify Kubernetes deployment
         run: |
           kubectl rollout status deployment/frontend --timeout=180s || true
@@ -105,6 +119,7 @@ jobs:
           kubectl get all
           echo "----- Logging - kubectl describe deploy -----"
           kubectl describe deploy frontend
+        working-directory: .
       - name: Verify Frontend ECR image
         run: |
           echo "----- Logging - Frontend ECR Image Details -----"

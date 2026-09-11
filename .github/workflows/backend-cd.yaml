@@ -92,13 +92,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - uses: azure/setup-kubectl@v4
       - run: aws eks update-kubeconfig --region "$AWS_REGION" --name cluster
+        working-directory: .
       - run: kubectl apply -k starter/backend/k8s
+        working-directory: .
       - run: kubectl set image deployment/backend backend="${{ needs.build.outputs.image }}"
+        working-directory: .
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/backend --timeout=180s
           kubectl get pods
           kubectl get services backend
+        working-directory: .
       - name: Verify Kubernetes deployment
         run: |
           kubectl rollout status deployment/backend --timeout=180s || true
@@ -106,6 +110,7 @@ jobs:
           kubectl get all
           echo "----- Logging - kubectl describe deploy -----"
           kubectl describe deploy backend
+        working-directory: .
       - name: Verify Backend ECR image
         run: |
           echo "----- Logging - Backend ECR Image Details -----"
