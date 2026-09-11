@@ -76,6 +76,16 @@ jobs:
       - id: registry
         run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
         working-directory: .
+      - name: Create ECR repository if it does not exist
+        run: |
+          if ! aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" >/dev/null 2>&1; then
+            aws ecr create-repository \
+              --repository-name "$ECR_REPOSITORY" \
+              --region "$AWS_REGION"
+          fi
+        working-directory: .
       - uses: aws-actions/amazon-ecr-login@v2
       - uses: docker/build-push-action@v6
         with:
@@ -109,16 +119,12 @@ jobs:
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/frontend --timeout=180s
-          kubectl get pods
-          kubectl get services frontend
+          kubectl get pods -l app=frontend
+          kubectl get service frontend
         working-directory: .
       - name: Verify Kubernetes deployment
         run: |
-          kubectl rollout status deployment/frontend --timeout=180s || true
-          echo "----- Logging - kubectl get all -----"
           kubectl get all
-          echo "----- Logging - kubectl describe deploy -----"
-          kubectl describe deploy frontend
         working-directory: .
       - name: Verify Frontend ECR image
         run: |
@@ -126,5 +132,6 @@ jobs:
           AWS_PAGER="" aws ecr describe-images \
             --repository-name frontend \
             --region "$AWS_REGION" \
-            --query 'sort_by(imageDetails,&imagePushedAt)[-1].{Tags:imageTags,Digest:imageDigest,PushedAt:imagePushedAt}' \
+            --image-ids imageTag="${{ github.sha }}" \
+            --query 'imageDetails[0].{Tags:imageTags,Digest:imageDigest,PushedAt:imagePushedAt}' \
             --output table
