@@ -59,6 +59,16 @@ jobs:
       - id: registry
         run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
         working-directory: .
+      - name: Create ECR repository if it does not exist
+        run: |
+          if ! aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --region "$AWS_REGION" >/dev/null 2>&1; then
+            aws ecr create-repository \
+              --repository-name "$ECR_REPOSITORY" \
+              --region "$AWS_REGION"
+          fi
+        working-directory: .
       - uses: aws-actions/amazon-ecr-login@v2
       - uses: docker/build-push-action@v6
         with:
